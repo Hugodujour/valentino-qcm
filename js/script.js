@@ -188,7 +188,7 @@ function renderStartScreen() {
         if (start > total) break; 
 
         setsHtml += `
-            <button onclick="startQuiz(${i * setSize}, ${end})" class="group relative px-6 py-3 bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-xl font-semibold text-lg transition-all border border-slate-700 hover:border-indigo-500 w-full mb-3 flex justify-between items-center group-hover:scale-[1.02]">
+            <button onclick="startQuiz(${i * setSize}, ${end})" class="group relative px-6 py-4 bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white rounded-lg font-semibold text-lg transition-all border border-slate-700 hover:border-indigo-500 flex justify-between items-center group-hover:scale-[1.02]">
                 <div class="flex flex-col text-left">
                     <span>Set ${i + 1}</span>
                     <span class="text-xs opacity-60 font-normal">Questions ${start} - ${end}</span>
@@ -205,12 +205,12 @@ function renderStartScreen() {
 
     // Add "All" button
     setsHtml += `
-        <button onclick="startQuiz(0, ${total})" class="mt-4 group relative px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-indigo-500/25 flex justify-center items-center">
+        <button onclick="startQuiz(0, ${total})" class="col-span-1 md:col-span-2 lg:col-span-3 mt-2 group relative px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-indigo-500/25 flex justify-center items-center">
             <span class="relative">Tout le questionnaire (${total})</span>
             ${(() => {
                 const best = getBestScore(0, total);
                 return best !== null 
-                    ? `<div class="text-right flex flex-col items-end leading-none"><span class="text-[0.6rem] uppercase tracking-widest text-indigo-200 mb-1">Meilleur Score</span><span class="text-2xl font-bold">${best}</span></div>` 
+                    ? `<div class="text-right flex flex-col items-end leading-none ml-4"><span class="text-[0.6rem] uppercase tracking-widest text-indigo-200 mb-1">Record</span><span class="text-2xl font-bold">${best}</span></div>` 
                     : '';
             })()}
         </button>
@@ -227,7 +227,7 @@ function renderStartScreen() {
             if (parsed && typeof parsed.currentQuestionIndex === 'number' && typeof parsed.score === 'number') {
                 const qCount = parsed.quizEndIndex - parsed.quizStartIndex;
                 resumeHtml = `
-                    <button onclick="resumeQuiz()" class="mb-6 group relative px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-emerald-500/25 flex justify-between items-center">
+                    <button onclick="resumeQuiz()" class="mb-8 group relative px-8 py-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-emerald-500/25 flex justify-between items-center">
                         <span class="flex flex-col text-left">
                             <span>Reprendre la progression</span>
                             <span class="text-xs font-normal opacity-80">Question ${parsed.currentQuestionIndex + 1} / ${qCount} • Score: ${parsed.score}</span>
@@ -274,7 +274,7 @@ const phrases = [
     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
 
     app.innerHTML = `
-        <div class="glass-card rounded-3xl p-8 md:p-12 text-center animate-fade-in mx-auto w-full max-w-2xl">
+        <div class="glass-card rounded-xl p-8 md:p-12 text-center animate-fade-in mx-auto w-full max-w-5xl">
             <div class="mb-6 flex justify-end">
                  <button onclick="toggleMusic()" class="music-toggle-btn text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
                     <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors">
@@ -295,8 +295,8 @@ const phrases = [
                 ${randomPhrase}
             </p>
             
-            <div class="grid gap-2 w-full max-w-md mx-auto">
-                <button id="timer-toggle-btn" onclick="toggleTimerMode()" class="mb-4 w-full flex items-center justify-between px-6 py-4 rounded-xl border border-slate-700 ${state.timerEnabled ? 'bg-indigo-500/10 border-indigo-500' : 'bg-slate-800/50 hover:bg-slate-800'} transition-all group">
+            <div class="w-full max-w-4xl mx-auto">
+                <button id="timer-toggle-btn" onclick="toggleTimerMode()" class="mb-8 w-full flex items-center justify-between px-6 py-4 rounded-lg border border-slate-700 ${state.timerEnabled ? 'bg-indigo-500/10 border-indigo-500' : 'bg-slate-800/50 hover:bg-slate-800'} transition-all group">
                      <div class="flex items-center gap-3">
                         <div class="icon-container w-10 h-10 rounded-lg ${state.timerEnabled ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'} flex items-center justify-center transition-colors">
                             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
@@ -312,7 +312,10 @@ const phrases = [
                 </button>
 
                 ${resumeHtml}
-                ${setsHtml}
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    ${setsHtml}
+                </div>
             </div>
         </div>
         </div>
