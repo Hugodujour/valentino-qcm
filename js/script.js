@@ -10,6 +10,7 @@ const state = {
     quizStartIndex: 0,
     quizEndIndex: 0,
     timerEnabled: false,
+    randomModeEnabled: false,
 };
 
 // Timer Globals
@@ -87,7 +88,11 @@ function saveProgress() {
         // We do not save selectedIndices as we assume saving happens between questions or after validation
         // Saving 'isAnswered' allows resuming on the results of the current question if the user navigates away after answering but before "Next"
         isAnswered: state.isAnswered,
-        timerEnabled: state.timerEnabled
+        isAnswered: state.isAnswered,
+        timerEnabled: state.timerEnabled,
+        randomModeEnabled: state.randomModeEnabled,
+        // Persist exact order of questions (indices in the main quizData array)
+        questionOrder: state.activeQuestions ? state.activeQuestions.map(q => quizData.indexOf(q)) : []
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -104,10 +109,17 @@ function loadProgress() {
         state.wrong = data.wrong;
         state.quizStartIndex = data.quizStartIndex;
         state.quizEndIndex = data.quizEndIndex;
+        state.quizEndIndex = data.quizEndIndex;
         state.timerEnabled = data.timerEnabled;
-        // Re-slice questions
+        state.randomModeEnabled = data.randomModeEnabled;
         if (typeof quizData !== 'undefined') {
-            state.activeQuestions = quizData.slice(state.quizStartIndex, state.quizEndIndex);
+            if (data.questionOrder && Array.isArray(data.questionOrder) && data.questionOrder.length > 0) {
+                // Restore exact order (handles shuffled states)
+                state.activeQuestions = data.questionOrder.map(idx => quizData[idx]).filter(q => q);
+            } else {
+                // Fallback for legacy saves or missing order
+                state.activeQuestions = quizData.slice(state.quizStartIndex, state.quizEndIndex);
+            }
         }
         
         // If we want to restore strictly the visual state of a validated question, we'd need more logic.
@@ -166,6 +178,46 @@ function toggleTimerMode() {
     } else {
         renderStartScreen();
     }
+}
+
+function toggleRandomMode() {
+    state.randomModeEnabled = !state.randomModeEnabled;
+    const btn = document.getElementById('random-toggle-btn');
+    if (btn) {
+        if (state.randomModeEnabled) {
+            btn.classList.remove('bg-slate-800/50', 'hover:bg-slate-800');
+            btn.classList.add('bg-indigo-500/10', 'border-indigo-500');
+            btn.querySelector('.icon-container').classList.remove('bg-slate-700', 'text-slate-400');
+            btn.querySelector('.icon-container').classList.add('bg-indigo-500', 'text-white');
+            btn.querySelector('.status-title').classList.remove('text-slate-300');
+            btn.querySelector('.status-title').classList.add('text-indigo-400');
+            btn.querySelector('.status-text').innerText = 'Activé (Ordre aléatoire)';
+            btn.querySelector('.switch-bg').classList.remove('bg-slate-700');
+            btn.querySelector('.switch-bg').classList.add('bg-indigo-500');
+            btn.querySelector('.switch-knob').classList.add('translate-x-6');
+        } else {
+            btn.classList.remove('bg-indigo-500/10', 'border-indigo-500');
+            btn.classList.add('bg-slate-800/50', 'hover:bg-slate-800');
+            btn.querySelector('.icon-container').classList.remove('bg-indigo-500', 'text-white');
+            btn.querySelector('.icon-container').classList.add('bg-slate-700', 'text-slate-400');
+            btn.querySelector('.status-title').classList.remove('text-indigo-400');
+            btn.querySelector('.status-title').classList.add('text-slate-300');
+            btn.querySelector('.status-text').innerText = 'Désactivé';
+            btn.querySelector('.switch-bg').classList.remove('bg-indigo-500');
+            btn.querySelector('.switch-bg').classList.add('bg-slate-700');
+            btn.querySelector('.switch-knob').classList.remove('translate-x-6');
+        }
+    } else {
+        renderStartScreen();
+    }
+}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]];
+  }
+  return array;
 }
 
 function getCorrectIndices(question) {
@@ -227,7 +279,7 @@ function renderStartScreen() {
             if (parsed && typeof parsed.currentQuestionIndex === 'number' && typeof parsed.score === 'number') {
                 const qCount = parsed.quizEndIndex - parsed.quizStartIndex;
                 resumeHtml = `
-                    <button onclick="resumeQuiz()" class="mb-8 group relative px-8 py-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-emerald-500/25 flex justify-between items-center">
+                    <button onclick="resumeQuiz()" class="mb-8 group relative px-8 py-5 bg-amber-500 hover:bg-amber-400 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-amber-500/25 flex justify-between items-center">
                         <span class="flex flex-col text-left">
                             <span>Reprendre la progression</span>
                             <span class="text-xs font-normal opacity-80">Question ${parsed.currentQuestionIndex + 1} / ${qCount} • Score: ${parsed.score}</span>
@@ -283,11 +335,6 @@ const phrases = [
                     <span class="text-sm font-medium">Son Off</span>
                 </button>
             </div>
-            <div class="mb-6 flex justify-center">
-                <div class="w-16 h-16 bg-indigo-500/20 rounded-2xl flex items-center justify-center rotate-3">
-                    <img src="./assets/images/balance.gif" alt=":O" class="w-full h-full object-cover">
-                </div>
-            </div>
             <h1 class="text-3xl md:text-4xl font-bold text-white mb-4 tracking-tight">
                 QCM Droit des Affaires
             </h1>
@@ -296,20 +343,37 @@ const phrases = [
             </p>
             
             <div class="w-full max-w-4xl mx-auto">
-                <button id="timer-toggle-btn" onclick="toggleTimerMode()" class="mb-8 w-full flex items-center justify-between px-6 py-4 rounded-lg border border-slate-700 ${state.timerEnabled ? 'bg-indigo-500/10 border-indigo-500' : 'bg-slate-800/50 hover:bg-slate-800'} transition-all group">
-                     <div class="flex items-center gap-3">
-                        <div class="icon-container w-10 h-10 rounded-lg ${state.timerEnabled ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'} flex items-center justify-center transition-colors">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                        </div>
-                        <div class="text-left">
-                            <span class="status-title block font-semibold ${state.timerEnabled ? 'text-indigo-400' : 'text-slate-300'}">Mode Chronomètre</span>
-                            <span class="status-text text-xs text-slate-500">${state.timerEnabled ? 'Activé (30s / question)' : 'Désactivé'}</span>
-                        </div>
-                     </div>
-                     <div class="switch-bg w-12 h-6 rounded-full relative transition-colors ${state.timerEnabled ? 'bg-indigo-500' : 'bg-slate-700'}">
-                        <div class="switch-knob absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${state.timerEnabled ? 'translate-x-6' : ''}"></div>
-                     </div>
-                </button>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                    <button id="timer-toggle-btn" onclick="toggleTimerMode()" class="w-full flex items-center justify-between px-6 py-4 rounded-lg border border-slate-700 ${state.timerEnabled ? 'bg-indigo-500/10 border-indigo-500' : 'bg-slate-800/50 hover:bg-slate-800'} transition-all group">
+                         <div class="flex items-center gap-3">
+                            <div class="icon-container w-10 h-10 rounded-lg ${state.timerEnabled ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'} flex items-center justify-center transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <div class="text-left">
+                                <span class="status-title block font-semibold ${state.timerEnabled ? 'text-indigo-400' : 'text-slate-300'}">Mode Chronomètre</span>
+                                <span class="status-text text-xs text-slate-500">${state.timerEnabled ? 'Activé (30s / question)' : 'Désactivé'}</span>
+                            </div>
+                         </div>
+                         <div class="switch-bg w-12 h-6 rounded-full relative transition-colors ${state.timerEnabled ? 'bg-indigo-500' : 'bg-slate-700'}">
+                            <div class="switch-knob absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${state.timerEnabled ? 'translate-x-6' : ''}"></div>
+                         </div>
+                    </button>
+
+                    <button id="random-toggle-btn" onclick="toggleRandomMode()" class="w-full flex items-center justify-between px-6 py-4 rounded-lg border border-slate-700 ${state.randomModeEnabled ? 'bg-indigo-500/10 border-indigo-500' : 'bg-slate-800/50 hover:bg-slate-800'} transition-all group">
+                         <div class="flex items-center gap-3">
+                            <div class="icon-container w-10 h-10 rounded-lg ${state.randomModeEnabled ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-400'} flex items-center justify-center transition-colors">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                            </div>
+                            <div class="text-left">
+                                <span class="status-title block font-semibold ${state.randomModeEnabled ? 'text-indigo-400' : 'text-slate-300'}">Mode Aléatoire</span>
+                                <span class="status-text text-xs text-slate-500">${state.randomModeEnabled ? 'Activé' : 'Désactivé'}</span>
+                            </div>
+                         </div>
+                         <div class="switch-bg w-12 h-6 rounded-full relative transition-colors ${state.randomModeEnabled ? 'bg-indigo-500' : 'bg-slate-700'}">
+                            <div class="switch-knob absolute top-1 left-1 bg-white w-4 h-4 rounded-full transition-transform ${state.randomModeEnabled ? 'translate-x-6' : ''}"></div>
+                         </div>
+                    </button>
+                </div>
 
                 ${resumeHtml}
                 
@@ -379,7 +443,7 @@ function renderQuestion() {
             <!-- Timer Bar -->
             ${state.timerEnabled ? `
             <div class="relative w-full h-1.5 bg-slate-800 rounded-full mb-4 overflow-hidden">
-                 <div id="timer-bar" class="absolute top-0 left-0 h-full bg-amber-400 transition-all duration-1000 ease-linear" style="width: 100%"></div>
+                 <div id="timer-bar" class="absolute top-0 left-0 h-full bg-amber-500 transition-all duration-1000 ease-linear" style="width: 100%"></div>
             </div>
             ` : ''}
 
@@ -684,6 +748,12 @@ function startQuiz(startIndex = 0, endIndex = null) {
 
     // Slice filtered subset
     state.activeQuestions = quizData.slice(startIndex, endIndex);
+
+    // Shuffle if enabled
+    if (state.randomModeEnabled) {
+        state.activeQuestions = shuffleArray([...state.activeQuestions]);
+    }
+    
     state.quizStartIndex = startIndex;
     state.quizEndIndex = endIndex;
 
@@ -696,8 +766,10 @@ function startQuiz(startIndex = 0, endIndex = null) {
 
 function resumeQuiz() {
     const userTimerChoice = state.timerEnabled;
+    const userRandomChoice = state.randomModeEnabled;
     if (loadProgress()) {
         state.timerEnabled = userTimerChoice;
+        state.randomModeEnabled = userRandomChoice;
         renderQuestion();
     } else {
         startQuiz(); // Fallback
@@ -713,6 +785,9 @@ if (typeof quizData !== 'undefined') {
             const parsed = JSON.parse(saved);
             if(parsed.timerEnabled !== undefined) {
                 state.timerEnabled = parsed.timerEnabled;
+            }
+            if(parsed.randomModeEnabled !== undefined) {
+                state.randomModeEnabled = parsed.randomModeEnabled;
             }
         } catch(e) {}
     }
