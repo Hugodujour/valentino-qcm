@@ -475,6 +475,14 @@ function renderSubjectsScreen() {
 
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                 ${subjectsHtml}
+                
+                <!-- Placeholder for future subjects (Hidden on mobile) -->
+                <div class="hidden md:flex group relative p-8 bg-slate-900/50 border border-dashed border-slate-800 rounded-3xl flex-col items-center justify-center text-center opacity-40">
+                    <div class="w-14 h-14 bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
+                        <svg class="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
+                    </div>
+                    <span class="text-slate-500 font-medium italic text-sm">Nouveaux thèmes bientôt...</span>
+                </div>
 
                 ${legacyHtml}
             </div>
