@@ -11,6 +11,8 @@ const state = {
     quizEndIndex: 0,
     timerEnabled: false,
     randomModeEnabled: false,
+    currentSubject: null, // New: Tracks which subject is selected
+    showLegacy: false, // New: Tracks if legacy subjects are shown
 };
 
 // Timer Globals
@@ -52,7 +54,7 @@ function updateMusicButtons() {
         } else {
             btn.innerHTML = `
                 <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z clip-path="url(#off)"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"></path></svg>
                 </div>
                 <span class="text-sm font-medium">Son Off</span>
             `;
@@ -83,16 +85,16 @@ function saveProgress() {
         wrong: state.wrong,
         quizStartIndex: state.quizStartIndex,
         quizEndIndex: state.quizEndIndex,
-        // We do not save selectedIndices as we assume saving happens between questions or after validation
         // Saving 'isAnswered' allows resuming on the results of the current question if the user navigates away after answering but before "Next"
-        // We do not save selectedIndices as we assume saving happens between questions or after validation
-        // Saving 'isAnswered' allows resuming on the results of the current question if the user navigates away after answering but before "Next"
-        isAnswered: state.isAnswered,
         isAnswered: state.isAnswered,
         timerEnabled: state.timerEnabled,
         randomModeEnabled: state.randomModeEnabled,
-        // Persist exact order of questions (indices in the main quizData array)
-        questionOrder: state.activeQuestions ? state.activeQuestions.map(q => quizData.indexOf(q)) : []
+        currentSubject: state.currentSubject,
+        questionOrder: (state.activeQuestions && state.currentSubject && allQuizzes[state.currentSubject]) 
+            ? state.activeQuestions.map(q => {
+                const subjectData = allQuizzes[state.currentSubject].data;
+                return subjectData.indexOf(q);
+            }) : []
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 }
@@ -112,13 +114,16 @@ function loadProgress() {
         state.quizEndIndex = data.quizEndIndex;
         state.timerEnabled = data.timerEnabled;
         state.randomModeEnabled = data.randomModeEnabled;
-        if (typeof quizData !== 'undefined') {
+        state.currentSubject = data.currentSubject || null;
+
+        if (typeof allQuizzes !== 'undefined' && state.currentSubject) {
+            const subjectData = allQuizzes[state.currentSubject].data;
             if (data.questionOrder && Array.isArray(data.questionOrder) && data.questionOrder.length > 0) {
                 // Restore exact order (handles shuffled states)
-                state.activeQuestions = data.questionOrder.map(idx => quizData[idx]).filter(q => q);
+                state.activeQuestions = data.questionOrder.map(idx => subjectData[idx]).filter(q => q);
             } else {
                 // Fallback for legacy saves or missing order
-                state.activeQuestions = quizData.slice(state.quizStartIndex, state.quizEndIndex);
+                state.activeQuestions = subjectData.slice(state.quizStartIndex, state.quizEndIndex);
             }
         }
         
@@ -228,8 +233,14 @@ function getCorrectIndices(question) {
 
 // Render Functions
 function renderStartScreen() {
-    // Count total questions
-    const total = typeof quizData !== 'undefined' ? quizData.length : 0;
+    if (!state.currentSubject) {
+        renderSubjectsScreen();
+        return;
+    }
+
+    const subject = allQuizzes[state.currentSubject];
+    const quizData = subject.data;
+    const total = quizData.length;
     const setsCount = 6;
     const setSize = Math.ceil(total / setsCount);
 
@@ -246,7 +257,7 @@ function renderStartScreen() {
                     <span class="text-xs opacity-60 font-normal">Questions ${start} - ${end}</span>
                 </div>
                 ${(() => {
-                    const best = getBestScore(i * setSize, end);
+                    const best = getBestScore(`${state.currentSubject}_${i * setSize}`, end);
                     return best !== null 
                         ? `<div class="text-right"><span class="block text-xs uppercase tracking-widest text-emerald-400 font-bold">Best</span><span class="text-xl font-bold text-white">${best}</span></div>` 
                         : `<svg class="w-6 h-6 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>`;
@@ -260,7 +271,7 @@ function renderStartScreen() {
         <button onclick="startQuiz(0, ${total})" class="col-span-1 md:col-span-2 lg:col-span-3 mt-2 group relative px-8 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-indigo-500/25 flex justify-center items-center">
             <span class="relative">Tout le questionnaire (${total})</span>
             ${(() => {
-                const best = getBestScore(0, total);
+                const best = getBestScore(`${state.currentSubject}_0`, total);
                 return best !== null 
                     ? `<div class="text-right flex flex-col items-end leading-none ml-4"><span class="text-[0.6rem] uppercase tracking-widest text-indigo-200 mb-1">Record</span><span class="text-2xl font-bold">${best}</span></div>` 
                     : '';
@@ -268,78 +279,55 @@ function renderStartScreen() {
         </button>
     `;
 
-    // Check for saved progress
-    const savedState = localStorage.getItem(STORAGE_KEY);
-    let resumeHtml = '';
-    
-    if (savedState) {
-        try {
-            const parsed = JSON.parse(savedState);
-            // Verify basic integrity
-            if (parsed && typeof parsed.currentQuestionIndex === 'number' && typeof parsed.score === 'number') {
-                const qCount = parsed.quizEndIndex - parsed.quizStartIndex;
-                resumeHtml = `
-                    <button onclick="resumeQuiz()" class="mb-8 group relative px-8 py-5 bg-amber-500 hover:bg-amber-400 text-white rounded-lg font-bold text-lg transition-all transform hover:-translate-y-1 w-full shadow-lg shadow-amber-500/25 flex justify-between items-center">
-                        <span class="flex flex-col text-left">
-                            <span>Reprendre la progression</span>
-                            <span class="text-xs font-normal opacity-80">Question ${parsed.currentQuestionIndex + 1} / ${qCount} • Score: ${parsed.score}</span>
-                        </span>
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
-                    </button>
-                    <div class="flex items-center gap-4 mb-6">
-                        <div class="h-px bg-slate-700 flex-1"></div>
-                        <span class="text-slate-500 text-sm uppercase font-semibold tracking-wider">Ou nouvelle partie</span>
-                        <div class="h-px bg-slate-700 flex-1"></div>
-                    </div>
-                `;
-            }
-        } catch(e) {}
-    }
-
     // Random Phrases
-const phrases = [
-  "Allez inspecteur, montre-nous ce que dit le Code !",
-  "Alors Valentin, on apprend en s'amusant ?",
-  "Respire… c’est que du droit, pas une garde à vue.",
-  "Le Code pénal te regarde. Et il juge.",
-  "Indice : la réponse C n’est pas toujours la bonne.",
-  "On n’est pas sur BFMTV, ici faut réfléchir.",
-  "Même le Code civil croit en toi.",
-  "Fais honneur à l’uniforme !",
-  "Un QCM par jour, le barreau pour toujours (ou pas).",
-  "Pas d’objection ? Alors répond.",
-  "Attention, piège juridique en approche !",
-  "Le droit n’oublie jamais. Contrairement à toi.",
-  "Courage, après ça tu pourras verbaliser en paix.",
-  "T’inquiète, personne n’a jamais aimé le droit.",
-  "Encore une question et café mérité !",
-  "Wallah cette question est vicieuse.",
-  "Si tu rates, c’était un contrôle de routine.",
-  "On lâche rien, même pas en flagrant délit.",
-  "La loi est dure, mais c’est la loi.",
-  "Encore une erreur et on sort le rappel à la loi.",
-  "Si t’échoues, on dira que c’était un test psychologique.",
-  "Ce QCM est plus sévère que ton chef.",
-  "Même le suspect aurait mieux répondu."
-];
-
+    const phrases = [
+        "Allez inspecteur, montre-nous ce que dit le Code !",
+        "Alors Valentin, on apprend en s'amusant ?",
+        "Respire… c’est que du droit, pas une garde à vue.",
+        "Le Code pénal te regarde. Et il juge.",
+        "Indice : la réponse C n’est pas toujours la bonne.",
+        "On n’est pas sur BFMTV, ici faut réfléchir.",
+        "Même le Code civil croit en toi.",
+        "Fais honneur à l’uniforme !",
+        "Un QCM par jour, le barreau pour toujours (ou pas).",
+        "Pas d’objection ? Alors répond.",
+        "Attention, piège juridique en approche !",
+        "Le droit n’oublie jamais. Contrairement à toi.",
+        "Courage, après ça tu pourras verbaliser en paix.",
+        "T’inquiète, personne n’a jamais aimé le droit.",
+        "Encore une question et café mérité !",
+        "Wallah cette question est vicieuse.",
+        "Si tu rates, c’était un contrôle de routine.",
+        "On lâche rien, même pas en flagrant délit.",
+        "La loi est dure, mais c’est la loi.",
+        "Encore une erreur et on sort le rappel à la loi.",
+        "Si t’échoues, on dira que c’était un test psychologique.",
+        "Ce QCM est plus sévère que ton chef.",
+        "Même le suspect aurait mieux répondu."
+    ];
     const randomPhrase = phrases[Math.floor(Math.random() * phrases.length)];
 
     app.innerHTML = `
         <div class="glass-card rounded-xl p-8 md:p-12 text-center animate-fade-in mx-auto w-full max-w-5xl">
-            <div class="mb-6 flex justify-end">
-                 <button onclick="toggleMusic()" class="music-toggle-btn text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
+            <div class="mb-6 flex justify-between items-center">
+                <button onclick="selectSubject(null)" class="text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
+                    <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                    </div>
+                    <span class="text-sm font-medium">Retour aux thèmes</span>
+                </button>
+                <button onclick="toggleMusic()" class="music-toggle-btn text-slate-500 hover:text-white transition-colors flex items-center gap-2 group">
                     <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-slate-700 transition-colors">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
                     </div>
                     <span class="text-sm font-medium">Son Off</span>
                 </button>
             </div>
-            <h1 class="text-3xl md:text-4xl font-bold text-white mb-4 tracking-tight">
-                QCM Droit des Affaires
+            <h1 class="text-3xl md:text-4xl font-bold text-white mb-4 tracking-tight uppercase">
+                ${subject.title}
             </h1>
-            <p class="text-base text-slate-400 mb-8 leading-relaxed">
-                ${randomPhrase}
+            <p class="text-base text-slate-400 mb-8 leading-relaxed italic">
+                "${randomPhrase}"
             </p>
             
             <div class="w-full max-w-4xl mx-auto">
@@ -374,22 +362,155 @@ const phrases = [
                          </div>
                     </button>
                 </div>
-
-                ${resumeHtml}
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     ${setsHtml}
                 </div>
             </div>
         </div>
+    `;
+    updateMusicButtons();
+}
+
+function renderSubjectsScreen() {
+    const allKeys = Object.keys(allQuizzes);
+    const activeKeys = allKeys.filter(id => !allQuizzes[id].legacy);
+    const legacyKeys = allKeys.filter(id => allQuizzes[id].legacy);
+    
+    // Check for saved progress
+    const savedState = localStorage.getItem(STORAGE_KEY);
+    let resumeHtml = '';
+    
+    if (savedState) {
+        try {
+            const parsed = JSON.parse(savedState);
+            if (parsed && parsed.currentSubject && allQuizzes[parsed.currentSubject]) {
+                const subject = allQuizzes[parsed.currentSubject];
+                const qCount = parsed.quizEndIndex - parsed.quizStartIndex;
+                resumeHtml = `
+                    <button onclick="resumeQuiz()" class="mb-12 group relative px-8 py-6 bg-amber-500 hover:bg-amber-400 text-white rounded-2xl font-bold text-xl transition-all transform hover:-translate-y-1 w-full shadow-xl shadow-amber-500/20 flex justify-between items-center max-w-2xl mx-auto">
+                        <span class="flex flex-col text-left">
+                            <span class="text-xs uppercase tracking-widest opacity-70 mb-1">Continuer la session</span>
+                            <span>${subject.title}</span>
+                            <span class="text-sm font-normal opacity-90 mt-1">Question ${parsed.currentQuestionIndex + 1} / ${qCount} • Score: ${parsed.score}</span>
+                        </span>
+                        <div class="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>
+                        </div>
+                    </button>
+                    <div class="flex items-center gap-4 mb-10 max-w-md mx-auto">
+                        <div class="h-px bg-slate-800 flex-1"></div>
+                        <span class="text-slate-600 text-xs uppercase font-bold tracking-[0.2em]">Ou choisir un nouveau thème</span>
+                        <div class="h-px bg-slate-800 flex-1"></div>
+                    </div>
+                `;
+            }
+        } catch(e) {}
+    }
+
+    const renderCard = (id, isLegacy = false) => {
+        const s = allQuizzes[id];
+        return `
+            <button onclick="selectSubject('${id}')" class="group relative p-8 ${isLegacy ? 'bg-slate-900/30' : 'bg-slate-800/40'} hover:bg-indigo-600/20 border ${isLegacy ? 'border-slate-800' : 'border-slate-700'} hover:border-indigo-500 rounded-3xl transition-all duration-300 text-left flex flex-col h-full hover:scale-[1.02] hover:shadow-2xl hover:shadow-indigo-500/10 ${isLegacy ? 'opacity-60 grayscale-[0.5] hover:opacity-100 hover:grayscale-0' : ''}">
+                ${isLegacy ? '<span class="absolute top-4 right-6 text-[10px] font-black uppercase tracking-widest text-slate-500 bg-slate-800/50 px-2 py-1 rounded">Archive</span>' : ''}
+                <div class="w-14 h-14 ${isLegacy ? 'bg-slate-700' : 'bg-indigo-500'} rounded-2xl flex items-center justify-center mb-6 shadow-lg ${isLegacy ? '' : 'shadow-indigo-500/30'} group-hover:scale-110 transition-transform">
+                    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path></svg>
+                </div>
+                <h3 class="text-2xl font-bold text-white mb-2">${s.title}</h3>
+                <p class="text-slate-400 text-sm leading-relaxed mb-6 flex-grow">${s.data.length} questions disponibles.</p>
+                <div class="flex items-center text-indigo-400 font-bold text-sm uppercase tracking-wider group-hover:translate-x-2 transition-transform">
+                    Commencer
+                    <svg class="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path></svg>
+                </div>
+            </button>
+        `;
+    };
+
+    let subjectsHtml = activeKeys.map(id => renderCard(id)).join('');
+    
+    let legacyHtml = '';
+    if (legacyKeys.length > 0) {
+        if (state.showLegacy) {
+            legacyHtml = `
+                <div class="col-span-1 md:col-span-2 lg:col-span-3 mt-12 mb-6 flex items-center gap-4">
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                    <h2 class="text-xs font-black text-slate-500 uppercase tracking-[0.3em]">Archives</h2>
+                    <div class="h-px bg-slate-800 flex-1"></div>
+                </div>
+                ${legacyKeys.map(id => renderCard(id, true)).join('')}
+                <div class="col-span-1 md:col-span-2 lg:col-span-3 mt-8 flex justify-center">
+                    <button onclick="toggleLegacy(false)" class="text-slate-500 hover:text-white text-xs font-bold uppercase tracking-widest flex items-center gap-2">
+                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>
+                         Masquer les archives
+                    </button>
+                </div>
+            `;
+        } else {
+            legacyHtml = `
+                <div class="col-span-1 md:col-span-2 lg:col-span-3 mt-12 flex justify-center">
+                    <button onclick="toggleLegacy(true)" class="px-6 py-3 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white rounded-full text-xs font-bold uppercase tracking-widest border border-slate-700 transition-all flex items-center gap-3">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                        Voir les anciens thèmes (${legacyKeys.length})
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    app.innerHTML = `
+        <div class="w-full max-w-6xl mx-auto py-12 px-4 animate-fade-in">
+            <header class="text-center mb-16">
+                <div class="inline-block px-4 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-bold tracking-[0.2em] uppercase mb-6 animate-pulse-slow">
+                    Plateforme de révision
+                </div>
+                <h1 class="text-5xl md:text-7xl font-black text-white mb-6 tracking-tighter">
+                    VALENTINO<span class="text-indigo-500">.</span>QUIZ
+                </h1>
+                <p class="text-xl text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                    Préparez vos examens avec nos questionnaires interactifs conçus pour une mémorisation efficace.
+                </p>
+            </header>
+
+            ${resumeHtml}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                ${subjectsHtml}
+
+                ${legacyHtml}
+            </div>
+            
+            <footer class="mt-24 pt-8 border-t border-slate-800/50 flex flex-col md:flex-row justify-between items-center gap-6">
+                <div class="flex items-center gap-4">
+                    <button onclick="toggleMusic()" class="music-toggle-btn text-slate-500 hover:text-white transition-colors flex items-center gap-2 group bg-slate-800/50 px-4 py-2 rounded-full border border-slate-700">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"></path></svg>
+                        <span class="text-xs font-bold uppercase tracking-widest">Musique Off</span>
+                    </button>
+                </div>
+                <p class="text-slate-600 text-xs font-medium tracking-widest uppercase">© 2026 Valentino Quiz • Droit & Formation</p>
+            </footer>
         </div>
     `;
     updateMusicButtons();
 }
 
+function toggleLegacy(show) {
+    state.showLegacy = show;
+    renderSubjectsScreen();
+}
+
+function selectSubject(subjectId) {
+    state.currentSubject = subjectId;
+    if (!subjectId) {
+        state.activeQuestions = null;
+    }
+    saveProgress();
+    renderStartScreen();
+}
+
 function renderQuestion() {
     // Ensure we refer to active questions filtered in startQuiz
-    const questionsList = state.activeQuestions || quizData;
+    const subject = allQuizzes[state.currentSubject];
+    const questionsList = state.activeQuestions || subject.data;
 
     if (state.currentQuestionIndex >= questionsList.length) {
         renderResults();
@@ -532,7 +653,7 @@ function stopTimer() {
 function handleOptionClick(index) {
     if (state.isAnswered) return;
 
-    const questionsList = state.activeQuestions || quizData;
+    const questionsList = state.activeQuestions || allQuizzes[state.currentSubject].data;
     const q = questionsList[state.currentQuestionIndex];
     const correctIndices = getCorrectIndices(q);
 
@@ -571,7 +692,7 @@ function handleOptionClick(index) {
 function revealAnswers() {
     stopTimer(); // Stop timer when answering
     state.isAnswered = true;
-    const questionsList = state.activeQuestions || quizData;
+    const questionsList = state.activeQuestions || allQuizzes[state.currentSubject].data;
     const q = questionsList[state.currentQuestionIndex];
     const correctIndices = new Set(getCorrectIndices(q));
     const selected = state.selectedIndices;
@@ -618,7 +739,7 @@ function revealAnswers() {
     // Change Button to "Next"
     const actionBtn = document.getElementById('action-btn');
     actionBtn.disabled = false; // Ensure it's enabled if we came from skip
-    actionBtn.innerText = state.currentQuestionIndex === questionsList.length - 1 ? 'Voir les résultats' : 'Continuer';
+    actionBtn.innerText = state.currentQuestionIndex === (state.activeQuestions || allQuizzes[state.currentSubject].data).length - 1 ? 'Voir les résultats' : 'Continuer';
     actionBtn.onclick = nextQuestion;
     
     // Check correctness for button color
@@ -642,7 +763,7 @@ function skipQuestion() {
 
 function submitAnswer() {
     // Check answer
-    const questionsList = state.activeQuestions || quizData;
+    const questionsList = state.activeQuestions || allQuizzes[state.currentSubject].data;
     const q = questionsList[state.currentQuestionIndex];
     const correctIndices = new Set(getCorrectIndices(q));
     const selected = state.selectedIndices;
@@ -669,9 +790,9 @@ function nextQuestion() {
 function renderResults() {
     clearProgress(); // Clear local storage on completion
     // Save best score
-    saveBestScore(state.quizStartIndex, state.quizEndIndex, state.score);
+    saveBestScore(`${state.currentSubject}_${state.quizStartIndex}`, state.quizEndIndex, state.score);
 
-    const questionsList = state.activeQuestions || quizData;
+    const questionsList = state.activeQuestions || allQuizzes[state.currentSubject].data;
     const total = questionsList.length;
     const percentage = Math.round((state.score / total) * 100);
     
@@ -733,13 +854,15 @@ function renderResults() {
                 Retour à l'accueil
             </button>
         </div>
-        </div>
     `;
     updateMusicButtons();
 }
 
 function startQuiz(startIndex = 0, endIndex = null) {
-    if (endIndex === null && typeof quizData !== 'undefined') {
+    const subject = allQuizzes[state.currentSubject];
+    const quizData = subject.data;
+
+    if (endIndex === null && quizData) {
         endIndex = quizData.length;
     }
     
@@ -777,7 +900,7 @@ function resumeQuiz() {
 }
 
 // Initial Init
-if (typeof quizData !== 'undefined') {
+if (typeof allQuizzes !== 'undefined') {
     // Preload timer preference if available
     const saved = localStorage.getItem(STORAGE_KEY);
     if(saved) {
@@ -789,6 +912,9 @@ if (typeof quizData !== 'undefined') {
             if(parsed.randomModeEnabled !== undefined) {
                 state.randomModeEnabled = parsed.randomModeEnabled;
             }
+            // Note: We intentionally don't restore currentSubject here 
+            // so the user always starts on the dashboard.
+            // The dashboard will show a "Resume" button for the last session.
         } catch(e) {}
     }
     renderStartScreen();

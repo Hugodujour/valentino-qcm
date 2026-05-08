@@ -1,4 +1,8 @@
-const quizData = [
+if (typeof allQuizzes === 'undefined') window.allQuizzes = {};
+allQuizzes["droit_affaires"] = {
+    "title": "Droit des Affaires",
+    "legacy": true,
+    "data": [
   {
     "id": 1,
     "question": "Dans un contrat de bail commercial…",
@@ -5151,4 +5155,5 @@ const quizData = [
       }
     ]
   }
-];
+ ]
+};
